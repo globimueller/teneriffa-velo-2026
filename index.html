@@ -56,7 +56,10 @@
   }
   #topbar > *{pointer-events:auto;}
   .brand{display:flex; align-items:baseline; gap:10px; transition:opacity .2s, transform .2s;}
-  #topbar.list-open .brand{opacity:0; transform:translateY(-6px); pointer-events:none;}
+  /* Header title and category filters only show while no route is selected;
+     the burger/info/help buttons (.top-actions) stay visible always. */
+  #topbar.route-selected .brand,
+  #topbar.route-selected #cat-filters{opacity:0; transform:translateY(-6px); pointer-events:none;}
   .brand h1{
     font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:0.02em;
     font-size:26px; margin:0; text-transform:uppercase; color:var(--sand);
@@ -67,7 +70,7 @@
     letter-spacing:0.06em; text-transform:uppercase;
   }
   .top-actions{display:flex; gap:8px; align-items:center;}
-  #cat-filters{display:flex; gap:6px; flex-wrap:wrap;}
+  #cat-filters{display:flex; gap:6px; flex-wrap:wrap; transition:opacity .2s, transform .2s;}
   .cat-btn{
     display:flex; align-items:center; gap:5px; font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600;
     background:var(--panel); border:1px solid var(--hairline); color:var(--sand-dim); border-radius:999px;
@@ -183,9 +186,17 @@
     background:var(--panel-solid); border:1px solid var(--hairline); border-radius:var(--radius);
     box-shadow:0 -10px 40px rgba(0,0,0,0.4);
     transform:translateY(calc(100% + 20px)); transition:transform .35s cubic-bezier(.2,.8,.2,1), left .3s ease;
-    max-height:46vh; display:flex; flex-direction:column;
+    max-height:var(--drawer-h, 46vh); display:flex; flex-direction:column;
     padding-bottom:env(safe-area-inset-bottom);
   }
+  .drawer-drag{
+    width:100%; height:20px; flex-shrink:0; cursor:ns-resize; touch-action:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .drawer-drag::before{
+    content:""; width:40px; height:4px; border-radius:2px; background:var(--hairline); transition:background .15s;
+  }
+  .drawer-drag:hover::before, .drawer-drag.is-dragging::before{background:var(--teal);}
   @media (min-width: 881px){
     body.rail-collapsed #drawer{ left:16px; }
   }
@@ -353,8 +364,7 @@
   <div class="legend-row"><span style="font-size:20px; width:18px; text-align:center;">🏠</span> Unterkunft</div>
   <div class="legend-row"><span style="font-size:20px; width:18px; text-align:center;">✈️</span> Flughafen</div>
   <div class="legend-row"><span style="font-size:20px; width:18px; text-align:center;">🌊</span> Siam Park (grösster Wasserpark)</div>
-  <h3 style="margin-top:14px;">Routenfarben</h3>
-  <p style="font-size:11.5px; color:var(--sand-dim); line-height:1.5; margin:0;">Jede Route hat ihre eigene, feste Neonfarbe — auf der 3D-Karte und in der Liste links identisch.</p>
+  <p style="font-size:10.5px; color:var(--sand-dim); text-align:right; margin:14px 0 0; opacity:.6;">made by roc</p>
 </div>
 
 <div id="help-panel">
@@ -368,6 +378,7 @@
 </div>
 
 <div id="drawer">
+  <div class="drawer-drag" id="drawer-drag" aria-label="Höhe des Panels anpassen" role="separator" aria-orientation="horizontal"></div>
   <div class="drawer-top">
     <div class="drawer-title">
       <h2 id="d-name">—</h2>
