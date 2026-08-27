@@ -7,17 +7,12 @@
   var ICON_URL_MAP = {};
 
   var NEON_COLORS = ["#00E5FF", "#FF2E97", "#B300FF", "#39FF14", "#2979FF", "#FFD300", "#FF0044", "#00FFA3", "#FF6600"];
-  var byKey = {};
-  var map, selectedKey = null, hoverMarker = null, hoverPopup = null;
-  var activeCats = { water: true, bakery: true, lunch: true, sight: true };
-
   var CAT_META = {
     water:  { icon: "🚰", label: "Wasser" },
     bakery: { icon: "🥐", label: "Bäckerei" },
     lunch:  { icon: "🍽️", label: "Mittagessen" },
     sight:  { icon: "📸", label: "Sightseeing" }
   };
-
   var ISLAND_BOUNDS = [[-16.93, 27.95], [-16.10, 28.62]];
 
   function escapeHtml(s) {
@@ -26,20 +21,14 @@
     });
   }
   function isMobileLayout() { return window.innerWidth <= 880; }
+  function loadJSON(url) { return fetch(url).then(function (r) {
+    if (!r.ok) throw new Error("Fetch failed: " + url + " (" + r.status + ")");
+    return r.json();
+  }); }
 
-  function loadJSON(url) { return fetch(url).then(function (r) { return r.json(); }); }
-  function loadAllData() {
-    return loadJSON("routes/index.json").then(function (keys) {
-      return Promise.all(keys.map(function (k) { return loadJSON("routes/" + k + ".json"); }));
-    }).then(function (routes) {
-      DATA = routes;
-      DATA.forEach(function (r, i) { r.color = NEON_COLORS[i % NEON_COLORS.length]; });
-      DATA.forEach(function (r) { byKey[r.key] = r; });
-    });
-  }
-  function loadLandmarks() { return loadJSON("landmarks.json").then(function (d) { LANDMARKS = d; }); }
-  function loadIconUrlMap() { return loadJSON("icon_url_map.json").then(function (d) { ICON_URL_MAP = d; }); }
+  var byKey = {};
 
+  // ---------- GeoJSON builders ----------
   function routesGeoJSON() {
     var feats = [];
     DATA.forEach(function (r) {
@@ -81,8 +70,8 @@
     };
   }
 
-  function init() {
-  map = new maplibregl.Map({
+  // ---------- Map init ----------
+  var map = new maplibregl.Map({
     container: "map",
     style: {
       version: 8,
@@ -106,12 +95,28 @@
   map.scrollZoom.setWheelZoomRate(1 / 380);
   map.getCanvas().setAttribute("tabindex", "0");
 
-  function loadIconAssets() {
+  var selectedKey = null;
+  var activeCats = { water: true, bakery: true, lunch: true, sight: true };
+  var hoverMarker = null;
+  var hoverPopup = null;
+
+  function loadRoutes() {
+    return loadJSON("routes/index.json").then(function (keys) {
+      return Promise.all(keys.map(function (k) { return loadJSON("routes/" + k + ".json"); }));
+    }).then(function (routes) {
+      DATA = routes;
+      DATA.forEach(function (r, i) { r.color = NEON_COLORS[i % NEON_COLORS.length]; });
+      byKey = {}; DATA.forEach(function (r) { byKey[r.key] = r; });
+    });
+  }
+  function loadLandmarks() { return loadJSON("landmarks.json").then(function (d) { LANDMARKS = d; }); }
+  function loadIconUrlMap() { return loadJSON("icon_url_map.json").then(function (d) { ICON_URL_MAP = d; }); }
+
+  function loadIconImages() {
     var ids = Object.keys(ICON_URL_MAP);
     return Promise.all(ids.map(function (id) {
       return new Promise(function (resolve) {
         var img = new Image();
-        img.crossOrigin = "anonymous";
         img.onload = function () {
           if (!map.hasImage(id)) map.addImage(id, img, { pixelRatio: 2 });
           resolve();
@@ -124,78 +129,83 @@
 
   map.on("load", function () {
     map.setTerrain({ source: "terrain-dem", exaggeration: 1.35 });
-    map.addSource("routes", { type: "geojson", data: routesGeoJSON() });
 
-    map.addLayer({ id: "routes-hit", type: "line", source: "routes",
-      layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": "#000", "line-opacity": 0, "line-width": 22 } });
+    Promise.all([loadRoutes(), loadLandmarks(), loadIconUrlMap()]).then(function () {
+      map.addSource("routes", { type: "geojson", data: routesGeoJSON() });
 
-    map.addLayer({ id: "routes-glow", type: "line", source: "routes", layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": ["get", "color"], "line-width": 16, "line-blur": 6, "line-opacity": 0.0 } });
-    map.addLayer({ id: "routes-line", type: "line", source: "routes", layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 12, 3.5, 16, 6], "line-opacity": 0.92 } });
+      map.addLayer({ id: "routes-hit", type: "line", source: "routes",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": "#000", "line-opacity": 0, "line-width": 22 } });
+      map.addLayer({ id: "routes-glow", type: "line", source: "routes", layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": 16, "line-blur": 6, "line-opacity": 0.0 } });
+      map.addLayer({ id: "routes-line", type: "line", source: "routes", layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2, 12, 3.5, 16, 6], "line-opacity": 0.92 } });
 
-    loadIconAssets().then(function () {
-      map.addSource("pois", { type: "geojson", data: poisGeoJSON() });
-      map.addSource("landmarks", { type: "geojson", data: landmarksGeoJSON() });
+      return loadIconImages().then(function () {
+        map.addSource("pois", { type: "geojson", data: poisGeoJSON() });
+        map.addSource("landmarks", { type: "geojson", data: landmarksGeoJSON() });
 
-      map.addLayer({
-        id: "poi-symbols", type: "symbol", source: "pois",
-        layout: { "icon-image": ["get", "iconId"], "icon-size": 0.34, "icon-allow-overlap": true, "icon-anchor": "center", "icon-pitch-alignment": "map" },
-        paint: { "icon-opacity": 1 }
-      });
-      map.addLayer({
-        id: "landmark-symbols", type: "symbol", source: "landmarks",
-        layout: { "icon-image": ["get", "iconId"], "icon-size": 0.30, "icon-allow-overlap": true, "icon-anchor": "bottom", "icon-pitch-alignment": "map" }
-      });
-
-      hoverPopup = new maplibregl.Popup({ offset: 14, closeButton: false, maxWidth: "230px" });
-
-      function poiPopupHtml(p) {
-        var distTxt = p.distKm != null ? (" · km " + p.distKm) : "";
-        return '<div class="poi-pop"><strong>' + escapeHtml(p.place) + "</strong>" +
-          '<div class="poi-pop-meta">' + escapeHtml(p.routeName) + distTxt + (p.ele != null ? (" · " + p.ele + " m ü.M.") : "") + "</div></div>";
-      }
-      function landmarkPopupHtml(p) {
-        return '<div class="poi-pop"><strong>' + escapeHtml(p.name) + "</strong>" +
-          (p.subtitle ? '<div class="poi-pop-meta">' + escapeHtml(p.subtitle) + "</div>" : "") + "</div>";
-      }
-
-      ["poi-symbols", "landmark-symbols"].forEach(function (layerId) {
-        map.on("mouseenter", layerId, function (e) {
-          map.getCanvas().style.cursor = "pointer";
-          var f = e.features[0];
-          var html = layerId === "poi-symbols" ? poiPopupHtml(f.properties) : landmarkPopupHtml(f.properties);
-          hoverPopup.setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+        map.addLayer({
+          id: "poi-symbols", type: "symbol", source: "pois",
+          layout: { "icon-image": ["get", "iconId"], "icon-size": 0.34, "icon-allow-overlap": true, "icon-anchor": "center", "icon-pitch-alignment": "map" },
+          paint: { "icon-opacity": 1 }
         });
-        map.on("mouseleave", layerId, function () { map.getCanvas().style.cursor = ""; hoverPopup.remove(); });
+        map.addLayer({
+          id: "landmark-symbols", type: "symbol", source: "landmarks",
+          layout: { "icon-image": ["get", "iconId"], "icon-size": 0.30, "icon-allow-overlap": true, "icon-anchor": "bottom", "icon-pitch-alignment": "map" }
+        });
+
+        hoverPopup = new maplibregl.Popup({ offset: 14, closeButton: false, maxWidth: "230px" });
+
+        function poiPopupHtml(p) {
+          var distTxt = p.distKm != null ? (" · km " + p.distKm) : "";
+          return '<div class="poi-pop"><strong>' + escapeHtml(p.place) + "</strong>" +
+            '<div class="poi-pop-meta">' + escapeHtml(p.routeName) + distTxt + (p.ele != null ? (" · " + p.ele + " m ü.M.") : "") + "</div></div>";
+        }
+        function landmarkPopupHtml(p) {
+          return '<div class="poi-pop"><strong>' + escapeHtml(p.name) + "</strong>" +
+            (p.subtitle ? '<div class="poi-pop-meta">' + escapeHtml(p.subtitle) + "</div>" : "") + "</div>";
+        }
+
+        ["poi-symbols", "landmark-symbols"].forEach(function (layerId) {
+          map.on("mouseenter", layerId, function (e) {
+            map.getCanvas().style.cursor = "pointer";
+            var f = e.features[0];
+            var html = layerId === "poi-symbols" ? poiPopupHtml(f.properties) : landmarkPopupHtml(f.properties);
+            hoverPopup.setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+          });
+          map.on("mouseleave", layerId, function () { map.getCanvas().style.cursor = ""; hoverPopup.remove(); });
+          map.on("click", layerId, function (e) {
+            var f = e.features[0];
+            var html = layerId === "poi-symbols" ? poiPopupHtml(f.properties) : landmarkPopupHtml(f.properties);
+            hoverPopup.setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+          });
+        });
+
+        applyCategoryFilter();
+      });
+    }).then(function () {
+      ["routes-line", "routes-hit"].forEach(function (layerId) {
+        map.on("mouseenter", layerId, function () { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", layerId, function () { map.getCanvas().style.cursor = ""; });
         map.on("click", layerId, function (e) {
-          var f = e.features[0];
-          var html = layerId === "poi-symbols" ? poiPopupHtml(f.properties) : landmarkPopupHtml(f.properties);
-          hoverPopup.setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+          var key = e.features[0].properties.key;
+          selectRoute(key, { flyToRoute: true });
         });
       });
 
-      applyCategoryFilter();
+      buildRail();
+      buildLegend();
+      updateSelectionStyle();
+      introSpin();
+
+      hoverMarker = new maplibregl.Marker({ color: "#F2EDE4" }).setLngLat([0, 0]);
+    }).catch(function (err) {
+      console.error("Fehler beim Laden der Kartendaten:", err);
+      var rail = document.getElementById("rail-list");
+      if (rail) rail.innerHTML = '<p style="padding:16px;color:var(--lava);font-size:12px;">Fehler beim Laden der Routendaten: ' + escapeHtml(err.message) + '</p>';
     });
-
-    ["routes-line", "routes-hit"].forEach(function (layerId) {
-      map.on("mouseenter", layerId, function () { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", layerId, function () { map.getCanvas().style.cursor = ""; });
-      map.on("click", layerId, function (e) {
-        var key = e.features[0].properties.key;
-        selectRoute(key, { flyToRoute: true });
-      });
-    });
-
-    buildRail();
-    buildLegend();
-    updateSelectionStyle();
-    introSpin();
-
-    hoverMarker = new maplibregl.Marker({ color: "#F2EDE4" }).setLngLat([0, 0]);
   });
-  } // end init()
 
   function introSpin() {
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -203,6 +213,7 @@
     map.easeTo({ bearing: start - 26, duration: 3200, easing: function (t) { return t; } });
   }
 
+  // ---------- Category filter ----------
   function applyCategoryFilter() {
     if (!map.getLayer("poi-symbols")) return;
     var activeList = Object.keys(activeCats).filter(function (c) { return activeCats[c]; });
@@ -229,6 +240,7 @@
     });
   }
 
+  // ---------- Rail ----------
   function railCard(r, index) {
     var missing = !r.coords;
     var div = document.createElement("button");
@@ -272,6 +284,7 @@
     }
   }
 
+  // ---------- Layout state: keep rail + drawer from ever overlapping ----------
   function setRailCollapsed(collapsed) {
     var rail = document.getElementById("rail");
     rail.classList.toggle("collapsed", collapsed);
@@ -283,6 +296,7 @@
     document.body.classList.toggle("rail-collapsed", collapsed);
   }
 
+  // ---------- Selection & drawer ----------
   function selectRoute(key, opts) {
     var r = byKey[key];
     if (!r) return;
@@ -394,6 +408,7 @@
     document.getElementById("d-poi-empty").style.display = chips.length ? "none" : "block";
   }
 
+  // ---------- GPX download ----------
   function downloadGpx(r) {
     var pts = r.coords.map(function (c) {
       return '<trkpt lat="' + c[1] + '" lon="' + c[0] + '"><ele>' + c[2] + '</ele></trkpt>';
@@ -410,6 +425,7 @@
     URL.revokeObjectURL(url);
   }
 
+  // ---------- Elevation profile with hover-sync ----------
   function renderProfile(r) {
     var svgNS = "http://www.w3.org/2000/svg";
     var container = document.getElementById("d-profile");
@@ -520,6 +536,7 @@
     labels.innerHTML = "<span>0 km</span><span>" + maxX.toFixed(0) + " km</span>";
   }
 
+  // ---------- Topbar height tracking ----------
   function observeTopbarHeight() {
     var topbar = document.getElementById("topbar");
     function apply() {
@@ -530,6 +547,7 @@
     window.addEventListener("resize", apply);
   }
 
+  // ---------- Legend / rail / help toggles ----------
   document.addEventListener("DOMContentLoaded", function () {
     observeTopbarHeight();
     syncHeaderForRailState();
@@ -551,6 +569,7 @@
 
   function toggleHelp() { document.getElementById("help-panel").classList.toggle("open"); }
 
+  // ---------- Google-Earth-style keyboard navigation ----------
   var PAN_PX = 90;
   window.addEventListener("keydown", function (e) {
     var tag = (e.target && e.target.tagName) || "";
@@ -582,11 +601,5 @@
   window.addEventListener("resize", function () {
     if (selectedKey) renderProfile(byKey[selectedKey]);
     syncHeaderForRailState();
-  });
-
-  Promise.all([loadAllData(), loadLandmarks(), loadIconUrlMap()]).then(init).catch(function (err) {
-    console.error("Tenerife 2026: failed to load route data", err);
-    var rail = document.getElementById("rail-list");
-    if (rail) rail.innerHTML = '<p style="padding:16px;color:#e8622c;">Daten konnten nicht geladen werden. Bitte Seite neu laden.</p>';
   });
 })();
