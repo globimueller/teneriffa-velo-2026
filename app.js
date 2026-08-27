@@ -147,12 +147,12 @@
 
         map.addLayer({
           id: "poi-symbols", type: "symbol", source: "pois",
-          layout: { "icon-image": ["get", "iconId"], "icon-size": 0.34, "icon-allow-overlap": true, "icon-anchor": "center", "icon-pitch-alignment": "map" },
+          layout: { "icon-image": ["get", "iconId"], "icon-size": 0.34, "icon-allow-overlap": true, "icon-anchor": "center", "icon-pitch-alignment": "viewport" },
           paint: { "icon-opacity": 1 }
         });
         map.addLayer({
           id: "landmark-symbols", type: "symbol", source: "landmarks",
-          layout: { "icon-image": ["get", "iconId"], "icon-size": 0.30, "icon-allow-overlap": true, "icon-anchor": "bottom", "icon-pitch-alignment": "map" }
+          layout: { "icon-image": ["get", "iconId"], "icon-size": 0.30, "icon-allow-overlap": true, "icon-anchor": "bottom", "icon-pitch-alignment": "viewport" }
         });
 
         hoverPopup = new maplibregl.Popup({ offset: 14, closeButton: false, maxWidth: "230px" });
@@ -190,7 +190,10 @@
         map.on("mouseleave", layerId, function () { map.getCanvas().style.cursor = ""; });
         map.on("click", layerId, function (e) {
           var key = e.features[0].properties.key;
-          selectRoute(key, { flyToRoute: true });
+          // Clicking a route directly in 3D opens its panel right away (unlike a list click,
+          // which only highlights first) — sized to half the screen height.
+          highlightRoute(key, { flyToRoute: true });
+          openRouteDrawer(key, 50);
         });
       });
 
@@ -255,7 +258,12 @@
       '<span class="rc-stat"><b>' + r.gain.toLocaleString("de-CH") + '</b> Hm</span></span>' +
       '<span class="rc-intensity" aria-hidden="true">' + r.intensity + '</span>' +
       '</span>';
-    div.addEventListener("click", function () { selectRoute(r.key, { flyToRoute: true }); });
+    div.addEventListener("click", function () {
+      // First click on a route in the list only highlights it in 3D; a second click
+      // on the already-highlighted route opens its detail panel.
+      if (selectedKey === r.key) { openRouteDrawer(r.key); }
+      else { highlightRoute(r.key, { flyToRoute: true }); }
+    });
     return div;
   }
   function buildRail() {
@@ -288,22 +296,22 @@
   function setRailCollapsed(collapsed) {
     var rail = document.getElementById("rail");
     rail.classList.toggle("collapsed", collapsed);
-    syncHeaderForRailState();
-  }
-  function syncHeaderForRailState() {
-    var collapsed = document.getElementById("rail").classList.contains("collapsed");
-    document.getElementById("topbar").classList.toggle("list-open", !collapsed && isMobileLayout());
     document.body.classList.toggle("rail-collapsed", collapsed);
+  }
+  // Header title + category filters only show while no route is selected;
+  // burger/info/help stay visible regardless (handled purely via CSS on #topbar).
+  function syncHeaderVisibility() {
+    document.getElementById("topbar").classList.toggle("route-selected", !!selectedKey);
   }
 
   // ---------- Selection & drawer ----------
-  function selectRoute(key, opts) {
+  // Step 1 (list click / map click): select + highlight the route in 3D, no panel yet.
+  function highlightRoute(key, opts) {
     var r = byKey[key];
     if (!r) return;
     selectedKey = key;
     updateSelectionStyle();
-    openDrawer(r);
-    if (isMobileLayout()) setRailCollapsed(true);
+    syncHeaderVisibility();
     if ((opts && opts.flyToRoute) && r.bbox) {
       var mobile = isMobileLayout();
       var mobileBottomPad = Math.round(window.innerHeight * 0.42);
@@ -312,6 +320,16 @@
         pitch: 58, bearing: bearingForRoute(r), duration: 1400
       });
     }
+  }
+  // Step 2 (second list click, or direct 3D-line click): actually open the detail panel.
+  function openRouteDrawer(key, heightVh) {
+    var r = byKey[key];
+    if (!r) return;
+    selectedKey = key;
+    updateSelectionStyle();
+    syncHeaderVisibility();
+    openDrawer(r, heightVh);
+    if (isMobileLayout()) setRailCollapsed(true);
   }
   function bearingForRoute(r) {
     if (!r.coords || r.coords.length < 2) return -18;
@@ -327,8 +345,11 @@
     document.body.classList.toggle("drawer-open", isOpen);
   }
 
-  function openDrawer(r) {
+  function openDrawer(r, heightVh) {
     setDrawerOpen(true);
+    // Explicit height (e.g. 50 for a direct 3D-line click) overrides the panel's current
+    // size; otherwise it keeps whatever height the user last dragged it to (or the CSS default).
+    if (heightVh) document.getElementById("drawer").style.setProperty("--drawer-h", heightVh + "vh");
     document.getElementById("d-name").textContent = r.name;
     document.getElementById("d-intensity").textContent = r.intensity;
     document.getElementById("d-dist").textContent = r.distance.toFixed(1);
@@ -355,7 +376,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("drawer-close").addEventListener("click", function () {
       setDrawerOpen(false);
-      selectedKey = null; updateSelectionStyle();
+      selectedKey = null; updateSelectionStyle(); syncHeaderVisibility();
     });
   });
 
@@ -547,10 +568,40 @@
     window.addEventListener("resize", apply);
   }
 
+  // ---------- Drawer manual resize (drag handle) ----------
+  function setupDrawerResize() {
+    var handle = document.getElementById("drawer-drag");
+    var drawer = document.getElementById("drawer");
+    if (!handle || !drawer) return;
+    var dragging = false, startY = 0, startH = 0;
+    var MIN_H = 160;
+    function maxH() { return window.innerHeight * 0.92; }
+    function onDown(e) {
+      dragging = true;
+      startY = e.clientY;
+      startH = drawer.getBoundingClientRect().height;
+      handle.classList.add("is-dragging");
+      if (handle.setPointerCapture) { try { handle.setPointerCapture(e.pointerId); } catch (err) {} }
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      var delta = startY - e.clientY; // dragging up increases height
+      var newH = Math.max(MIN_H, Math.min(maxH(), startH + delta));
+      drawer.style.setProperty("--drawer-h", newH + "px");
+    }
+    function onUp() { dragging = false; handle.classList.remove("is-dragging"); }
+    handle.addEventListener("pointerdown", onDown);
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  }
+
   // ---------- Legend / rail / help toggles ----------
   document.addEventListener("DOMContentLoaded", function () {
     observeTopbarHeight();
-    syncHeaderForRailState();
+    syncHeaderVisibility();
+    setupDrawerResize();
 
     document.getElementById("legend-toggle").addEventListener("click", function () {
       document.getElementById("legend-panel").classList.toggle("open");
@@ -590,7 +641,7 @@
       case "Escape":
         setDrawerOpen(false);
         document.getElementById("help-panel").classList.remove("open");
-        selectedKey = null; updateSelectionStyle();
+        selectedKey = null; updateSelectionStyle(); syncHeaderVisibility();
         break;
       case "?": toggleHelp(); break;
       default: handled = false;
@@ -600,6 +651,5 @@
 
   window.addEventListener("resize", function () {
     if (selectedKey) renderProfile(byKey[selectedKey]);
-    syncHeaderForRailState();
   });
 })();
