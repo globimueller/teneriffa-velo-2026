@@ -209,6 +209,17 @@
       updateSelectionStyle();
       introSpin();
 
+      // Clicking empty map (not a route/POI/landmark) collapses the open panel back to map-only.
+      var INTERACTIVE_LAYERS = ["routes-line", "routes-hit", "poi-symbols", "landmark-symbols"];
+      map.on("click", function (e) {
+        if (!document.body.classList.contains("drawer-open")) return;
+        var hits = map.queryRenderedFeatures(e.point, { layers: INTERACTIVE_LAYERS.filter(function (id) { return map.getLayer(id); }) });
+        if (hits.length === 0) {
+          setDrawerOpen(false);
+          selectedKey = null; updateSelectionStyle();
+        }
+      });
+
       hoverMarker = new maplibregl.Marker({ color: "#F2EDE4" }).setLngLat([0, 0]);
       hoverInfoPopup = new maplibregl.Popup({ offset: 12, closeButton: false, maxWidth: "180px" });
     }).catch(function (err) {
@@ -306,11 +317,6 @@
     rail.classList.toggle("collapsed", collapsed);
     document.body.classList.toggle("rail-collapsed", collapsed);
   }
-  // Header title + category filters only show while no route is selected;
-  // burger/info/help stay visible regardless (handled purely via CSS on #topbar).
-  function syncHeaderVisibility() {
-    document.getElementById("topbar").classList.toggle("route-selected", !!selectedKey);
-  }
 
   // ---------- Selection & drawer ----------
   // Step 1 (list click / map click): select + highlight the route in 3D, no panel yet.
@@ -319,7 +325,6 @@
     if (!r) return;
     selectedKey = key;
     updateSelectionStyle();
-    syncHeaderVisibility();
     if ((opts && opts.flyToRoute) && r.bbox) {
       var mobile = isMobileLayout();
       var mobileBottomPad = Math.round(window.innerHeight * 0.42);
@@ -335,7 +340,6 @@
     if (!r) return;
     selectedKey = key;
     updateSelectionStyle();
-    syncHeaderVisibility();
     openDrawer(r, heightVh);
     if (isMobileLayout()) setRailCollapsed(true);
   }
@@ -348,9 +352,12 @@
     return Math.atan2(y, x) * 180 / Math.PI;
   }
 
+  // Header title + category filters only show while the detail panel is closed —
+  // a route merely highlighted in the list (no panel open) keeps them visible.
   function setDrawerOpen(isOpen) {
     document.getElementById("drawer").classList.toggle("open", isOpen);
     document.body.classList.toggle("drawer-open", isOpen);
+    document.getElementById("topbar").classList.toggle("route-selected", isOpen);
   }
 
   function openDrawer(r, heightVh) {
@@ -384,7 +391,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("drawer-close").addEventListener("click", function () {
       setDrawerOpen(false);
-      selectedKey = null; updateSelectionStyle(); syncHeaderVisibility();
+      selectedKey = null; updateSelectionStyle();
     });
   });
 
@@ -597,7 +604,13 @@
     if (!handle || !drawer) return;
     var dragging = false, startY = 0, startH = 0;
     var MIN_H = 140;
-    function maxH() { return window.innerHeight * 0.92; }
+    function maxH() {
+      // Never let the panel's own top edge (with its close button) grow tall enough
+      // to reach into the topbar / map-control zone.
+      var topbar = document.getElementById("topbar");
+      var topbarH = topbar ? topbar.getBoundingClientRect().height : 76;
+      return Math.max(MIN_H, window.innerHeight - topbarH - 24);
+    }
     function onDown(e) {
       dragging = true;
       startY = e.clientY;
@@ -622,7 +635,6 @@
   // ---------- Legend / rail / help toggles ----------
   document.addEventListener("DOMContentLoaded", function () {
     observeTopbarHeight();
-    syncHeaderVisibility();
     setupDrawerResize();
 
     document.getElementById("legend-toggle").addEventListener("click", function () {
@@ -639,6 +651,10 @@
     document.getElementById("help-toggle").addEventListener("click", toggleHelp);
     document.getElementById("help-close").addEventListener("click", toggleHelp);
     document.getElementById("topdown-toggle").addEventListener("click", showOverview);
+    document.getElementById("drawer-half").addEventListener("click", function () {
+      var drawer = document.getElementById("drawer");
+      drawer.style.setProperty("--drawer-h", "50vh");
+    });
   });
 
   function toggleHelp() { document.getElementById("help-panel").classList.toggle("open"); }
@@ -647,7 +663,6 @@
   function showOverview() {
     selectedKey = null;
     updateSelectionStyle();
-    syncHeaderVisibility();
     setDrawerOpen(false);
     var minLon = 1e9, minLat = 1e9, maxLon = -1e9, maxLat = -1e9, found = false;
     DATA.forEach(function (r) {
@@ -685,7 +700,7 @@
       case "Escape":
         setDrawerOpen(false);
         document.getElementById("help-panel").classList.remove("open");
-        selectedKey = null; updateSelectionStyle(); syncHeaderVisibility();
+        selectedKey = null; updateSelectionStyle();
         break;
       case "?": toggleHelp(); break;
       default: handled = false;
