@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tenerife 2026">
@@ -39,7 +39,7 @@
     font-family:'Inter',system-ui,sans-serif;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;height:100%;height:100dvh;background:var(--basalt);color:var(--sand);overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:manipulation;}
+  html,body{margin:0;padding:0;height:100%;height:100dvh;height:var(--app-h, 100dvh);background:var(--basalt);color:var(--sand);overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:manipulation;}
   #map{position:absolute;inset:0;}
   .maplibregl-ctrl-attrib{font-size:10px;background:rgba(10,10,8,0.55)!important;color:var(--sand-dim)!important;}
   .maplibregl-ctrl-attrib a{color:var(--sand-dim)!important;}
