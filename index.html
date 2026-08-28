@@ -95,6 +95,7 @@
     transition:transform .3s ease, opacity .3s ease;
   }
   #rail.collapsed{transform:translateX(-370px); opacity:0; pointer-events:none;}
+  .rail-drag{ display:none; }
   .rail-head{
     padding:14px 16px 10px; border-bottom:1px solid var(--hairline);
     display:flex; align-items:center; justify-content:space-between;
@@ -286,8 +287,16 @@
   @media (max-width: 880px){
     #rail{
       left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right));
-      width:auto; top:auto; bottom:calc(10px + env(safe-area-inset-bottom)); height:36vh; transform:none;
+      width:auto; top:auto; bottom:calc(10px + env(safe-area-inset-bottom)); height:var(--rail-h, 50vh); transform:none;
     }
+    .rail-drag{
+      display:flex; align-items:center; justify-content:center; height:20px; flex-shrink:0;
+      cursor:ns-resize; touch-action:none; -webkit-user-select:none; user-select:none;
+    }
+    .rail-drag::before{
+      content:""; width:40px; height:5px; border-radius:3px; background:var(--hairline); transition:background .15s;
+    }
+    .rail-drag:hover::before, .rail-drag.is-dragging::before{ background:var(--teal); }
     #rail.collapsed{ transform:translateY(calc(100% - 46px)); opacity:1; pointer-events:auto; }
     body.drawer-open #rail.collapsed{ transform:translateY(100%); opacity:0; pointer-events:none; }
     #drawer{
@@ -316,7 +325,7 @@
     .cat-btn{ padding:6px 10px; font-size:11px; }
     .cat-btn span{ font-size:12px; }
     .icon-btn{ width:40px; height:40px; font-size:16px; }
-    #rail{ height:34vh; }
+    #rail{ height:var(--rail-h, 48vh); }
     .rail-head{ padding:12px 14px 8px; }
     .route-card{ padding:9px 10px; gap:9px; }
     .rc-name{ font-size:13px; }
@@ -361,6 +370,7 @@
 </div>
 
 <aside id="rail">
+  <div class="rail-drag" id="rail-drag" aria-label="Höhe der Routenliste anpassen" role="separator" aria-orientation="horizontal"></div>
   <div class="rail-head">
     <h2>Routen</h2>
   </div>
