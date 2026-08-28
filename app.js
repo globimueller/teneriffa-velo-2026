@@ -597,16 +597,16 @@
     window.addEventListener("resize", apply);
   }
 
-  // ---------- Drawer manual resize (drag handle) ----------
-  function setupDrawerResize() {
-    var handle = document.getElementById("drawer-drag");
-    var drawer = document.getElementById("drawer");
-    if (!handle || !drawer) return;
+  // ---------- Generic manual resize (drag handle), used by both drawer and rail ----------
+  function setupPanelResize(handleId, panelId, cssVar) {
+    var handle = document.getElementById(handleId);
+    var panel = document.getElementById(panelId);
+    if (!handle || !panel) return;
     var dragging = false, startY = 0, startH = 0;
     var MIN_H = 140;
     function maxH() {
-      // Never let the panel's own top edge (with its close button) grow tall enough
-      // to reach into the topbar / map-control zone.
+      // Never let the panel's own top edge grow tall enough to reach into the
+      // topbar / map-control zone.
       var topbar = document.getElementById("topbar");
       var topbarH = topbar ? topbar.getBoundingClientRect().height : 76;
       return Math.max(MIN_H, window.innerHeight - topbarH - 24);
@@ -614,7 +614,7 @@
     function onDown(e) {
       dragging = true;
       startY = e.clientY;
-      startH = drawer.getBoundingClientRect().height;
+      startH = panel.getBoundingClientRect().height;
       handle.classList.add("is-dragging");
       if (handle.setPointerCapture) { try { handle.setPointerCapture(e.pointerId); } catch (err) {} }
       e.preventDefault();
@@ -623,7 +623,7 @@
       if (!dragging) return;
       var delta = startY - e.clientY; // dragging up increases height
       var newH = Math.max(MIN_H, Math.min(maxH(), startH + delta));
-      drawer.style.setProperty("--drawer-h", newH + "px");
+      panel.style.setProperty(cssVar, newH + "px");
     }
     function onUp() { dragging = false; handle.classList.remove("is-dragging"); }
     handle.addEventListener("pointerdown", onDown);
@@ -635,7 +635,8 @@
   // ---------- Legend / rail / help toggles ----------
   document.addEventListener("DOMContentLoaded", function () {
     observeTopbarHeight();
-    setupDrawerResize();
+    setupPanelResize("drawer-drag", "drawer", "--drawer-h");
+    setupPanelResize("rail-drag", "rail", "--rail-h");
 
     document.getElementById("legend-toggle").addEventListener("click", function () {
       document.getElementById("legend-panel").classList.toggle("open");
