@@ -597,6 +597,35 @@
     window.addEventListener("resize", apply);
   }
 
+  // ---------- Real viewport height tracking (iOS Safari toolbar collapse/expand) ----------
+  // 100dvh alone can lag behind Safari's chrome briefly, leaving a black gap at the
+  // bottom edge; this actively keeps --app-h in sync with the real visual viewport.
+  function observeViewportHeight() {
+    function apply() {
+      var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      document.documentElement.style.setProperty("--app-h", h + "px");
+    }
+    apply();
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", apply);
+      window.visualViewport.addEventListener("scroll", apply);
+    }
+    window.addEventListener("resize", apply);
+    window.addEventListener("orientationchange", function () { setTimeout(apply, 50); setTimeout(apply, 300); });
+  }
+
+  // ---------- Prevent pinch-zoom from getting the layout stuck mid-zoom/pan ----------
+  // iOS Safari sometimes allows pinch gestures despite maximum-scale=1/user-scalable=no,
+  // which can leave the whole page zoomed and panned with no way to reset via touch.
+  function preventPinchZoom() {
+    document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+    document.addEventListener("gesturechange", function (e) { e.preventDefault(); });
+    document.addEventListener("touchmove", function (e) {
+      if (e.touches && e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener("dblclick", function (e) { e.preventDefault(); }, { passive: false });
+  }
+
   // ---------- Generic manual resize (drag handle), used by both drawer and rail ----------
   function setupPanelResize(handleId, panelId, cssVar) {
     var handle = document.getElementById(handleId);
@@ -635,6 +664,8 @@
   // ---------- Legend / rail / help toggles ----------
   document.addEventListener("DOMContentLoaded", function () {
     observeTopbarHeight();
+    observeViewportHeight();
+    preventPinchZoom();
     setupPanelResize("drawer-drag", "drawer", "--drawer-h");
     setupPanelResize("rail-drag", "rail", "--rail-h");
 
