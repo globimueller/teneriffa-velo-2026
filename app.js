@@ -6,7 +6,7 @@
   var LANDMARKS = [];
   var ICON_URL_MAP = {};
 
-  var NEON_COLORS = ["#00E5FF", "#FF2E97", "#B300FF", "#39FF14", "#2979FF", "#FFD300", "#FF0044", "#00FFA3", "#FF6600"];
+  var NEON_COLORS = ["#00E5FF", "#FF2E97", "#B300FF", "#39FF14", "#2979FF", "#FFD300", "#FF0044", "#00FFA3", "#FF6600", "#7CFF00", "#5B4DFF", "#E000FF", "#00C2FF", "#FFB300"];
   var CAT_META = {
     water:  { icon: "🚰", label: "Wasser" },
     bakery: { icon: "🥐", label: "Bäckerei" },
